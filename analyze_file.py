@@ -199,8 +199,7 @@ class AnalyzeDensities(object):
                 dataslice = data[startz:startz+cellsz, :, startx:startx+cellsx]
                 # norm to critical density and project on axis
                 lineout = np.mean(dataslice, axis=(0,2)) * data.attrs['unitSI'].value / normfactor
-                # return slightly smoothed result
-                return np.convolve(lineout, [0.1, 0.1, 0.1, 0.1, 0.2, 0.1, 0.1, 0.1, 0.1])[4:-4]
+                return lineout
 
     def slice_from_particles(filename, ts=None, particle="H_all", axis=2, thickness=0.8):
         """ takes particle output to compute density slice along center """
@@ -215,6 +214,186 @@ class AnalyzeDensities(object):
             weights=we
         )
 
+    @staticmethod
+    def arbitrary_slice_from_particles(
+                filename, ts=None,
+                vec1=[1, 0, 0],
+                vec2=[0, 1, 0],
+                center_point=[432, 450, 216],
+                poslims=[[-12, 12],[-15, 21]],
+                mu_in_cells = 30,
+                filter_point=None,
+                filter_thickness=45,
+                bins_E=np.linspace(0, 240, 241),
+                species='H_all',
+                verbose=True,
+            ):
+        """ returns a vec1-vec2-position-histogram, with energy as additional axis
+        if filter_thickness is a number, filter +-filter_thickness around filter_point in the 
+        direction of vec1 x vec2
+        if it's an iterable, take it as the bins. The histogram has dimension one more in that case
+        """
+        if ts is None: # then try to guess
+            ts = filename.replace('.bp', '').split('_')[-1]
+
+        if filter_point is None:
+            filter_point = center_point
+        vec3 = np.cross(vec1, vec2)
+
+        # some unit conversions:
+        m_p = 1.6726219e-27 # in SI
+        c = 3e8             # in SI
+        J2MeV = 6.242e+12
+        E_0 = m_p * c**2    # in SI
+
+        ###
+        ### compute all bins - we need bins in pic-units for effective binning, and bins for plotting
+        ###
+
+        bins_E_SI = bins_E / J2MeV 
+        bins_p2_SI = ((bins_E_SI + E_0)**2 - E_0**2) / c**2  # in SI
+
+        (pos1_1, pos1_2), (pos2_1, pos2_2) = poslims
+        bins_vec1_mu = np.linspace(pos1_1, pos1_2, round((pos1_2-pos1_1)*mu_in_cells)+1)            # in mu, for plotting
+        bins_vec2_mu = np.linspace(pos2_1, pos2_2, round((pos2_2-pos2_1)*mu_in_cells)+1)            # in mu, for plotting
+        bins_vec1_cells = np.round(bins_vec1_mu * mu_in_cells)           # for pos-binning, in cells
+        bins_vec2_cells = np.round(bins_vec2_mu * mu_in_cells)           # round to avoid strange bin overlaps
+        try:
+            bins_filter = [-np.inf] + list(filter_thickness) + [np.inf]     # for filter, in cells
+            slice_filterdim = slice(1, -1, None) # to pick the filtered hist from its last dimension
+            filter_nrcells = np.diff(bins_filter[slice_filterdim]).reshape((1, 1, 1, -1))
+        except TypeError: # if it's not iterable
+            bins_filter = [-1e9, -filter_thickness, filter_thickness, 1e9]  # for filter, in cells
+            slice_filterdim = 1 # hist will have 3 entries in last dimension, pick the middle one with this
+            filter_nrcells = 2*filter_thickness
+
+        with bp.File(filename) as fh:
+            ds = fh[f"/data/{ts}/particles/{species}/"]
+            Np = ds["weighting"].shape[0]
+            unitmom = ds["momentum/y"].unitSI.value
+            bins_p2_pic = bins_p2_SI / unitmom**2
+
+            # divide in chunks of less than 1e8 particles:
+            nrchunks = (Np + 1) // 50000000 + 1
+            if verbose:
+                print(f"will read the {Np} macroparticles in {nrchunks} chunks")
+            limits = list(np.linspace(0, Np, nrchunks, endpoint=False, dtype=int))[1:]
+            indices = [slice(i, j, None) for (i, j) in zip([None] + limits, limits + [None])]
+            hists = 0
+        
+            for i, index in enumerate(indices):
+                # read the data
+                weights = ds["weighting"][index]
+                N = len(weights)
+                pos = np.empty((N, 3))      # to store the data for taking scalar product later
+                pos[:, 0] = ds["positionOffset/x"][index]
+                pos[:, 1] = ds["positionOffset/y"][index]
+                pos[:, 2] = ds["positionOffset/z"][index]
+                p2 = (ds["momentum/x"][index]**2 + ds["momentum/y"][index]**2 + ds["momentum/z"][index]**2) / weights**2
+
+                # do binning
+                hist_raw, bin_edges = np.histogramdd(
+                    (np.dot(pos-center_point, vec1), np.dot(pos-center_point, vec2), p2, np.dot(pos-center_point, vec3)),
+                    bins=(bins_vec1_cells, bins_vec2_cells, bins_p2_pic, bins_filter),
+                    weights=weights
+                )
+                hists += hist_raw[:, :, :, slice_filterdim]
+                
+                if verbose:
+                    nrall = np.round(np.sum(hist_raw), 1)
+                    nrfilt = np.round(np.sum(hist_raw[:, :, :, slice_filterdim]), )
+                    print(f"In {i+1}. chunk: {nrfilt} particles, i.e. {np.round(nrfilt/nrall*100, 1)}% of the chunk, are inside the filter region")
+        
+        lastdims = (1, ) if slice_filterdim == 1 else (1, 1)
+        hist = (hists
+                / np.diff(bins_vec1_mu).reshape((-1, 1, *lastdims))
+                / np.diff(bins_vec2_mu).reshape((1, -1, *lastdims))
+                / (filter_nrcells / mu_in_cells)
+                * 1e18     # from mu to m - particles per m^3
+                / 1.742e27 # in n_c 
+        )
+        return hist, bins_vec1_mu, bins_vec2_mu, bins_E
+
+    @staticmethod
+    def lineout_n_over_gamma(
+                filename, ts=None,
+                vec1=[0, 0, 1],
+                vec2=[1, 0, 0],
+                center_point=[432, 450, 216],
+                filter_thickness=15,
+                poslim=[-15, 21],
+                mu_in_cells = 30,
+                species='e_all',
+                verbose=True,
+                dividebygamma=True,
+            ):
+        """ filter out a square given by vec1-vec2, return a function/histogram of 
+        the density from position along axis vec1 x vec2
+        """
+        if ts is None: # then try to guess
+            ts = filename.replace('.bp', '').split('_')[-1]
+
+        vec3 = np.cross(vec1, vec2)
+        
+        pos1, pos2 = poslim
+        bins_vec3_mu = np.linspace(pos1, pos2, round((pos2-pos1)*mu_in_cells)+1)            # in mu, for plotting
+        bins_vec3_cells = np.round(bins_vec3_mu * mu_in_cells)           # round to avoid strange bin overlaps
+        bins_filter = np.array([-1e9, -filter_thickness, filter_thickness, 1e9])
+        slice_filterdim = 1 # hist will have 3 entries in last dimension, pick the middle one with this
+        filter_nrcells = 2*filter_thickness
+
+        m_e = 9.1094e-31    # in SI
+        c = 3e8             # in SI
+        
+        with bp.File(filename) as fh:
+            ds = fh[f"/data/{ts}/particles/{species}/"]
+            Np = ds["weighting"].shape[0]
+            unitmom = ds["momentum/y"].unitSI.value
+            m2c2 = (m_e * c / unitmom)**2 # in PIC units
+
+            # divide in chunks of less than 1e8 particles:
+            nrchunks = (Np + 1) // 50000000 + 1
+            if verbose:
+                print(f"will read the {Np} macroparticles in {nrchunks} chunks")
+            limits = list(np.linspace(0, Np, nrchunks, endpoint=False, dtype=int))[1:]
+            indices = [slice(i, j, None) for (i, j) in zip([None] + limits, limits + [None])]
+            hists = 0
+        
+            for i, index in enumerate(indices):
+                # read the data
+                weights = ds["weighting"][index]
+                N = len(weights)
+                pos = np.empty((N, 3))      # to store the data for taking scalar product later
+                pos[:, 0] = ds["positionOffset/x"][index]
+                pos[:, 1] = ds["positionOffset/y"][index]
+                pos[:, 2] = ds["positionOffset/z"][index]
+                p2 = (ds["momentum/x"][index]**2 + ds["momentum/y"][index]**2 + ds["momentum/z"][index]**2) / weights**2
+                gamma = 1 if not dividebygamma else (1 + p2 / m2c2) ** 0.5
+
+                # do binning
+                hist_raw, bin_edges = np.histogramdd(
+                    (np.dot(pos-center_point, vec3), np.dot(pos-center_point, vec1), np.dot(pos-center_point, vec2)),
+                    bins=(bins_vec3_cells, bins_filter, bins_filter),
+                    weights=weights / gamma
+                )
+                hists += hist_raw[:, slice_filterdim, slice_filterdim]
+                
+                if verbose:
+                    nrall = np.round(np.sum(hist_raw), 1)
+                    nrfilt = np.round(np.sum(hist_raw[:, slice_filterdim, slice_filterdim]), )
+                    print(f"In {i+1}. chunk: {nrfilt} particles, i.e. {np.round(nrfilt/nrall*100, 1)}% of the chunk, are inside the filter region")
+        
+        print(hists.shape)
+        lastdims = (1, ) if slice_filterdim == 1 else (1, 1)
+        hist = (hists
+                / np.diff(bins_vec3_mu)
+                / (filter_nrcells / mu_in_cells)**2
+                * 1e18     # from mu to m - particles per m^3
+                / 1.742e27 # in n_c 
+        )
+        return hist, bins_vec3_mu
+
+
 
 class AnalyzePhaseSpace(object):
     @staticmethod
@@ -225,6 +404,7 @@ class AnalyzePhaseSpace(object):
                 filter_point=None,
                 filter_thickness=24,
                 bins_pos_mu=None,  
+                species="H_all",
                 verbose=True,
                 mom_or_energy='mom',
             ):
@@ -267,8 +447,8 @@ class AnalyzePhaseSpace(object):
             bins_E = list(-bins_Eneg)[:-1] + list(bins_Epos)               # can be used for plotting
             bins_betagamma = bins_mom_SI / m_p / c                         # alternatively those for plotting
         elif mom_or_energy == 'mom':
-            bins_betagamma_neg = np.linspace(-0.3, 0., 201)
-            bins_betagamma_pos = np.linspace(0., 0.64, 401)
+            bins_betagamma_neg = np.linspace(-0.4, 0., 201)
+            bins_betagamma_pos = np.linspace(0., 0.8, 401)
             bins_pneg_SI = bins_betagamma_neg * m_p * c
             bins_ppos_SI = bins_betagamma_pos * m_p * c
             bins_mom_SI = np.array(list(bins_pneg_SI)[:-1] + list(bins_ppos_SI)) # for binning, nearly, need to divide by unit, we get it only later from dataset
@@ -285,7 +465,7 @@ class AnalyzePhaseSpace(object):
         bins_filter = [-1e9, -filter_thickness, filter_thickness, 1e9] # for filter, in cells
 
         with bp.File(filename) as fh:
-            ds = fh[f"/data/{ts}/particles/H_all/"]
+            ds = fh[f"/data/{ts}/particles/{species}/"]
             Np = ds["weighting"].shape[0]
             unitmom = ds["momentum/y"].unitSI.value
             bins_mom_pic = bins_mom_SI / unitmom
@@ -334,7 +514,7 @@ class AnalyzePhaseSpace(object):
         return hist, bins_pos_mu, bins_betagamma, bins_E
 
 
-def energy_cutoff_from_hist(filename, threshold=0):
+def energy_cutoff_from_hist(filename, threshold=0, retlastspec=False):
     """ return the timeline and max-value of cutoff energy """
     with open(filename, 'r') as f:
         zeilen = f.readlines()
@@ -343,7 +523,7 @@ def energy_cutoff_from_hist(filename, threshold=0):
     lastline = len(zeilen)-2
     timeline = []
     # fill in the data, one dict per step
-    for nrzeile in range(lastline // 4, lastline+1):
+    for nrzeile in range(1, lastline+1):
         bins = np.array(list(map(float, zeilen[nrzeile].split()[1:-2])))
         thisdata = {}
         timeline.append(thisdata)
@@ -351,11 +531,40 @@ def energy_cutoff_from_hist(filename, threshold=0):
         thisdata['step'] = step
         thisdata['linenr'] = nrzeile
         thisdata['emax'] = energies[np.where(bins > threshold)[0][-1]] / 1000 # in MeV
+        if retlastspec and nrzeile == lastline:
+            lastspec = {
+                "step": step,
+                "linenr": nrzeile,
+                "bins": bins,
+                "energies": np.array(energies) / 1000,
+            }
 
     # now compute overall maximum energies
     tuples = [(r['emax'], r['step']) for r in timeline]
     value, timestep = max(tuples)
-    return tuples, value, timestep
+    return (tuples, value, timestep) if not retlastspec else (tuples, value, timestep, lastspec) 
+
+def energies_from_hist(filename, threshold=1., convolve=([0.2, 0.6, 0.2], 1)):
+    """ return timeline of spectra and max-energies """
+    with open(filename, 'r') as f:
+        zeile = f.readline()
+
+    energies = np.array([0] + list(map(float, zeile.split()[2:-2]))) / 1000
+    arr = np.loadtxt(filename, skiprows=1)
+    steps = np.array(arr[:, 0], dtype=int)
+    indices = {ts: i for i, ts in enumerate(steps)}
+    liste, anz = convolve
+    arr = arr[:, 2:-2]
+    
+    def last_bin(ts=steps[-1], threshold=threshold):
+        zeile = np.convolve(arr[indices[ts]], liste)[anz:-anz]
+        return energies[np.where(zeile > threshold)[0][-1]+anz]
+        
+    def first_gap(ts=steps[-1], threshold=threshold):
+        zeile = np.convolve(arr[indices[ts]], liste)[anz:-anz]
+        return energies[np.where(zeile <= threshold)[0][0]+anz]
+    
+    return energies, steps, arr, last_bin, first_gap
 
 
 def angular_spectrum_horizontplane_from_calo(filename, ts=None):
