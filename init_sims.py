@@ -160,6 +160,24 @@ class Params(object):
     
 from collections.abc import MutableSequence
 class Batch(MutableSequence):
+    """ An instance of Batch is a sequence of Sim-objects, containig all data
+    and methods common to those sims.
+
+    conceptually, a batch is a set of simulations with the same codebase and
+    paramset structure, varying by their specific parameter values.
+
+    All information to reconstruct a Batch objects can be dumped to disk.
+    This inculdes:
+     - location and version of the code
+     - location of the paramset
+     - parameters subject to variation
+     - list of files specifiyng information about the included sims
+     - ...?
+
+    Also a batch supplies the methods to dump itself to disk (i.e. dump the
+    information common to all sims, and a list of references to the dumps of
+    the sims) and recreate itself from a dump.
+    """
     def __init__(self, default_params, pic_paramSet, paramdictlist=[{}]):
         self.default_params = default_params
         self.pic_paramSet = pic_paramSet
