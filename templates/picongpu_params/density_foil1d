@@ -1,0 +1,154 @@
+/* Copyright 2013-2021 Axel Huebl, Heiko Burau, Rene Widera, Felix Schmitt,
+ *                     Richard Pausch
+ *
+ * This file is part of PIConGPU.
+ *
+ * PIConGPU is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * PIConGPU is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with PIConGPU.
+ * If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/** @file
+ *
+ * Configure existing or define new normalized density profiles here.
+ * During particle species creation in speciesInitialization.param,
+ * those profiles can be translated to spatial particle distributions.
+ */
+
+#pragma once
+
+#include "picongpu/particles/densityProfiles/profiles.def"
+/* preprocessor struct generator */
+#include <pmacc/preprocessor/struct.hpp>
+
+
+#ifndef PARAM_TARGETDENS
+#define PARAM_TARGETDENS 192.
+#endif
+#ifndef PARAM_TARGETPOS
+#define PARAM_TARGETPOS 8.
+#endif
+#ifndef PARAM_TARGETSIZE
+#define PARAM_TARGETSIZE 0.4
+#endif
+
+#ifndef PARAM_TARGETFS1
+#define PARAM_TARGETFS1 0.1
+#endif
+#ifndef PARAM_TARGETFL1
+#define PARAM_TARGETFL1 0.4
+#endif
+#ifndef PARAM_TARGETFS2
+#define PARAM_TARGETFS2 0.5
+#endif
+#ifndef PARAM_TARGETFL2
+#define PARAM_TARGETFL2 0
+#endif
+#ifndef PARAM_TARGETRS1
+#define PARAM_TARGETRS1 0.1
+#endif
+#ifndef PARAM_TARGETRL1
+#define PARAM_TARGETRL1 0
+#endif
+#ifndef PARAM_TARGETRS2
+#define PARAM_TARGETRS2 0.5
+#endif
+#ifndef PARAM_TARGETRL2
+#define PARAM_TARGETRL2 0
+#endif
+
+
+namespace picongpu
+{
+    namespace SI
+    {
+        /** Base density in particles per m^3 in the density profiles.
+         *
+         * This is often taken as reference maximum density in normalized profiles.
+         * Individual particle species can define a `densityRatio` flag relative
+         * to this value.
+         *
+         * unit: ELEMENTS/m^3
+         *
+         * We take n_e ("fully ionized") as reference density.
+         * Our target material (see speciesDefinition) is a liquid crystal called
+         * 8CB (4'-octyl-4-cyanobiphenyl).
+         */
+        constexpr float_64 nc = 1.11485e21 * 1.e6 / 0.8 / 0.8;
+        constexpr float_64 BASE_DENSITY_SI = PARAM_TARGETDENS * nc;
+
+    } // namespace SI
+
+    namespace densityProfiles
+    {
+        struct FlatFoilWithRampFunctor
+        {
+            /** This formula uses SI quantities only.
+             *  The profile will be multiplied by BASE_DENSITY_SI.
+             *
+             * @param position_SI total offset including all slides [meter]
+             * @param cellSize_SI cell sizes [meter]
+             *
+             * @return float_X density [normalized to 1.0]
+             */
+            HDINLINE float_X operator()(const floatD_64& position_SI, const float3_64& cellSize_SI)
+            {
+                // m -> mu
+                const float_64 y(position_SI.y() * 1.e6);
+                const float_64 coord(y - PARAM_TARGETPOS);
+                const float_64 size(PARAM_TARGETSIZE);
+
+                // exponential pre-expanded density
+                constexpr float_64 fs1(PARAM_TARGETFS1);
+                constexpr float_64 fl1(PARAM_TARGETFL1);
+                constexpr float_64 fs2(PARAM_TARGETFS2);
+                constexpr float_64 fl2(PARAM_TARGETFL2);
+                constexpr float_64 rs1(PARAM_TARGETRS1);
+                constexpr float_64 rl1(PARAM_TARGETRL1);
+                constexpr float_64 rs2(PARAM_TARGETRS2);
+                constexpr float_64 rl2(PARAM_TARGETRL2);
+
+                constexpr float_64 fc1 (-fl1);
+                constexpr float_64 fc2 (-fl1-fl2);
+                const float_64 fd ( math::exp(-fl1 / fs1) );
+                const float_64 rc1 (size+rl1);
+                const float_64 rc2 (rc1+rl2);
+                const float_64 rd ( math::exp(-rl1 / rs1) );
+
+                float_64 dens = 0.0;
+
+                // upramp
+                if(fc2 < coord && coord <= fc1)
+                    dens = fd * math::exp((fc1 - coord) / fs2);
+                if(fc1 < coord && coord <= 0)
+                    dens = math::exp((coord) / fs1);
+                // downramp
+                if(rc1 <= coord && coord < rc2)
+                    dens = rd * math::exp((rc1 - coord) / rs2);
+                if(size <= coord && coord < rc1)
+                    dens = math::exp((size - coord) / rs1);
+                // plateau
+                if(0 < coord && coord <= size)
+                    dens = 1.0;
+
+                // safety check: all parts of the function MUST be > 0
+                dens *= float_64(dens >= 0.0);
+                return dens;
+            }
+        };
+
+        // definition of free formula profile
+        using FlatFoilWithRamp = FreeFormulaImpl<FlatFoilWithRampFunctor>;
+
+    } // namespace densityProfiles
+} // namespace picongpu

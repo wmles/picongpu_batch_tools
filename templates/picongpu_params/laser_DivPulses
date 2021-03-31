@@ -1,0 +1,510 @@
+/* Copyright 2013-2021 Axel Huebl, Anton Helm, Rene Widera, Richard Pausch,
+ *                     Alexander Debus
+ *
+ * This file is part of PIConGPU.
+ *
+ * PIConGPU is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * PIConGPU is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with PIConGPU.
+ * If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/** @file
+ *
+ * Configure laser profiles. All laser propagate in y direction.
+ *
+ * Available profiles:
+ *  - None                : no laser init
+ *  - GaussianBeam        : Gaussian beam (focusing)
+ *  - PulseFrontTilt      : Gaussian beam with a tilted pulse envelope
+ *                          in 'x' direction
+ *  - PlaneWave           : a plane wave (Gaussian in time)
+ *  - Wavepacket          : wavepacket (Gaussian in time and space, not
+ *                          focusing)
+ *  - Polynom             : a polynomial laser envelope
+ *  - ExpRampWithPrepulse : wavepacket with exponential upramps and prepulse
+ *  - DivPulses 	  : wavepacket with better exponential upramps and multiple pulses
+ *
+ * In the end, this file needs to define a `Selected` class in namespace
+ * `picongpu::fields::laserProfiles`. A typical profile consists of a
+ * laser profile class and its parameters. For example:
+ *
+ * @code{.cpp}
+ * using Selected = GaussianBeam< GaussianBeamParam >;
+ * @endcode
+ */
+
+#pragma once
+
+#include "picongpu/fields/laserProfiles/profiles.def"
+#include <pmacc/ppFunctions.hpp>
+
+
+#ifndef PARAM_LASERPROFILE
+  #define PARAM_LASERPROFILE DivPulses
+#endif
+#ifndef PARAM_INITPLANE
+  #define PARAM_INITPLANE 0u
+#endif
+
+#ifndef PARAM_A0
+  #define PARAM_A0 30
+#endif
+#ifndef PARAM_W0
+  #define PARAM_W0 3
+#endif
+#ifndef PARAM_PULSELENGTH
+  #define PARAM_PULSELENGTH 30
+#endif
+#ifndef PARAM_PULSEINIT
+  #define PARAM_PULSEINIT 9
+#endif
+#ifndef PARAM_LASERPOL
+  #define PARAM_LASERPOL LINEAR_X
+#endif
+
+#ifndef PARAM_INT_0
+  #define PARAM_INT_0 1.e-12
+#endif
+#ifndef PARAM_INT_1
+  #define PARAM_INT_1 1.e-8
+#endif
+#ifndef PARAM_INT_2
+  #define PARAM_INT_2 1.e-4
+#endif
+#ifndef PARAM_INT_3
+  #define PARAM_INT_3 1.e-4
+#endif
+#ifndef PARAM_TIME_START
+  #define PARAM_TIME_START -420
+#endif
+#ifndef PARAM_TIME_0
+  #define PARAM_TIME_0 -420
+#endif
+#ifndef PARAM_TIME_1
+  #define PARAM_TIME_1 -400
+#endif
+#ifndef PARAM_TIME_2
+  #define PARAM_TIME_2 -200
+#endif
+#ifndef PARAM_TIME_3
+  #define PARAM_TIME_3 -100
+#endif
+#ifndef PARAM_TIME_END
+  #define PARAM_TIME_END 100
+#endif
+
+#ifndef PARAM_P01i
+  #define PARAM_P01i 0.0
+#endif
+#ifndef PARAM_P01t
+  #define PARAM_P01t -80
+#endif
+#ifndef PARAM_P01l
+  #define PARAM_P01l 1.0
+#endif
+#ifndef PARAM_P02i
+  #define PARAM_P02i 0.0
+#endif
+#ifndef PARAM_P02t
+  #define PARAM_P02t -80
+#endif
+#ifndef PARAM_P02l
+  #define PARAM_P02l 1.0
+#endif
+#ifndef PARAM_P03i
+  #define PARAM_P03i 0.0
+#endif
+#ifndef PARAM_P03t
+  #define PARAM_P03t -80
+#endif
+#ifndef PARAM_P03l
+  #define PARAM_P03l 1.0
+#endif
+#ifndef PARAM_P04i
+  #define PARAM_P04i 0.0
+#endif
+#ifndef PARAM_P04t
+  #define PARAM_P04t -80
+#endif
+#ifndef PARAM_P04l
+  #define PARAM_P04l 1.0
+#endif
+#ifndef PARAM_P05i
+  #define PARAM_P05i 0.0
+#endif
+#ifndef PARAM_P05t
+  #define PARAM_P05t -80
+#endif
+#ifndef PARAM_P05l
+  #define PARAM_P05l 1.0
+#endif
+#ifndef PARAM_P06i
+  #define PARAM_P06i 0.0
+#endif
+#ifndef PARAM_P06t
+  #define PARAM_P06t -80
+#endif
+#ifndef PARAM_P06l
+  #define PARAM_P06l 1.0
+#endif
+#ifndef PARAM_P07i
+  #define PARAM_P07i 0.0
+#endif
+#ifndef PARAM_P07t
+  #define PARAM_P07t -80
+#endif
+#ifndef PARAM_P07l
+  #define PARAM_P07l 1.0
+#endif
+#ifndef PARAM_P08i
+  #define PARAM_P08i 0.0
+#endif
+#ifndef PARAM_P08t
+  #define PARAM_P08t -80
+#endif
+#ifndef PARAM_P08l
+  #define PARAM_P08l 1.0
+#endif
+
+#ifndef PARAM_S01i
+  #define PARAM_S01i 0.0
+#endif
+#ifndef PARAM_S01s
+  #define PARAM_S01s -120
+#endif
+#ifndef PARAM_S01e
+  #define PARAM_S01e -80
+#endif
+#ifndef PARAM_S02i
+  #define PARAM_S02i 0.0
+#endif
+#ifndef PARAM_S02s
+  #define PARAM_S02s -120
+#endif
+#ifndef PARAM_S02e
+  #define PARAM_S02e -80
+#endif
+#ifndef PARAM_S03i
+  #define PARAM_S03i 0.0
+#endif
+#ifndef PARAM_S03s
+  #define PARAM_S03s -120
+#endif
+#ifndef PARAM_S03e
+  #define PARAM_S03e -80
+#endif
+#ifndef PARAM_S04i
+  #define PARAM_S04i 0.0
+#endif
+#ifndef PARAM_S04s
+  #define PARAM_S04s -120
+#endif
+#ifndef PARAM_S04e
+  #define PARAM_S04e -80
+#endif
+#ifndef PARAM_S05i
+  #define PARAM_S05i 0.0
+#endif
+#ifndef PARAM_S05s
+  #define PARAM_S05s -120
+#endif
+#ifndef PARAM_S05e
+  #define PARAM_S05e -80
+#endif
+#ifndef PARAM_S06i
+  #define PARAM_S06i 0.0
+#endif
+#ifndef PARAM_S06s
+  #define PARAM_S06s -120
+#endif
+#ifndef PARAM_S06e
+  #define PARAM_S06e -80
+#endif
+#ifndef PARAM_S07i
+  #define PARAM_S07i 0.0
+#endif
+#ifndef PARAM_S07s
+  #define PARAM_S07s -120
+#endif
+#ifndef PARAM_S07e
+  #define PARAM_S07e -80
+#endif
+#ifndef PARAM_S08i
+  #define PARAM_S08i 0.0
+#endif
+#ifndef PARAM_S08s
+  #define PARAM_S08s -120
+#endif
+#ifndef PARAM_S08e
+  #define PARAM_S08e -80
+#endif
+#ifndef PARAM_S09i
+  #define PARAM_S09i 0.0
+#endif
+#ifndef PARAM_S09s
+  #define PARAM_S09s -120
+#endif
+#ifndef PARAM_S09e
+  #define PARAM_S09e -80
+#endif
+#ifndef PARAM_S10i
+  #define PARAM_S10i 0.0
+#endif
+#ifndef PARAM_S10s
+  #define PARAM_S10s -120
+#endif
+#ifndef PARAM_S10e
+  #define PARAM_S10e -80
+#endif
+#ifndef PARAM_S11i
+  #define PARAM_S11i 0.0
+#endif
+#ifndef PARAM_S11s
+  #define PARAM_S11s -120
+#endif
+#ifndef PARAM_S11e
+  #define PARAM_S11e -80
+#endif
+#ifndef PARAM_S12i
+  #define PARAM_S12i 0.0
+#endif
+#ifndef PARAM_S12s
+  #define PARAM_S12s -120
+#endif
+#ifndef PARAM_S12e
+  #define PARAM_S12e -80
+#endif
+
+namespace picongpu
+{
+    namespace fields
+    {
+        namespace laserProfiles
+        {
+
+            namespace divPulses
+            {
+                static constexpr uint32_t SINPNR = 2;
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_INT, 1.e-4, 0.1);
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T1, -200, -160);
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T2, -180, -100);
+            } // namespace divPulses
+
+            struct PlaneWaveParam
+            {
+                /** unit: meter */
+                static constexpr float_64 WAVE_LENGTH_SI = 0.8e-6;
+
+                /** UNITCONV */
+                static constexpr float_64 UNITCONV_A0_to_Amplitude_SI = -2.0 * PI / WAVE_LENGTH_SI
+                    * ::picongpu::SI::ELECTRON_MASS_SI * ::picongpu::SI::SPEED_OF_LIGHT_SI
+                    * ::picongpu::SI::SPEED_OF_LIGHT_SI / ::picongpu::SI::ELECTRON_CHARGE_SI;
+
+                /** unit: W / m^2 */
+                // calculate: _A0 = 8.549297e-6 * sqrt( Intensity[W/m^2] ) * wavelength[m] (linearly polarized)
+
+                /** unit: none */
+                static constexpr float_64 _A0 = PARAM_A0;
+
+                /** unit: Volt / meter */
+                static constexpr float_64 AMPLITUDE_SI = _A0 * UNITCONV_A0_to_Amplitude_SI;
+
+                /** unit: Volt / meter */
+                // static constexpr float_64 AMPLITUDE_SI = 1.738e13;
+
+                /** The profile of the test Lasers 0 and 2 can be stretched by a
+                 *      constexprant area between the up and downramp
+                 *  unit: seconds */
+                static constexpr float_64 LASER_NOFOCUS_CONSTANT_SI = 0.0;
+
+                /** Pulse length: sigma of std. gauss for intensity (E^2)
+                 *  PULSE_LENGTH_SI = FWHM_of_Intensity   / [ 2*sqrt{ 2* ln(2) } ]
+                 *                                          [    2.354820045     ]
+                 *  Info:             FWHM_of_Intensity = FWHM_Illumination
+                 *                      = what a experimentalist calls "pulse duration"
+                 *  unit: seconds (1 sigma) */
+                static constexpr float_64 PULSE_LENGTH_SI = PARAM_PULSELENGTH * 1.e-15 / 2.354820045;
+
+                /** The laser pulse will be initialized half of PULSE_INIT times of the PULSE_LENGTH before and after
+                 * the plateau unit: none */
+                static constexpr float_64 RAMP_INIT = PARAM_PULSEINIT;
+
+                /** cell from top where the laser is initialized
+                 *
+                 * if `initPlaneY == 0` than the absorber are disabled.
+                 * if `initPlaneY > absorbercells negative Y` the negative absorber in y
+                 * direction is enabled
+                 *
+                 * valid ranges:
+                 *   - initPlaneY == 0
+                 *   - absorber cells negative Y < initPlaneY < cells in y direction of the top gpu
+                 */
+                static constexpr uint32_t initPlaneY = PARAM_INITPLANE;
+
+                /** laser phase shift (no shift: 0.0)
+                 *
+                 * sin(omega*time + laser_phase): starts with phase=0 at center --> E-field=0 at center
+                 *
+                 * unit: rad, periodic in 2*pi
+                 */
+                static constexpr float_X LASER_PHASE = 0.0;
+
+                /** Available polarisation types
+                 */
+                enum PolarisationType
+                {
+                    LINEAR_X = 1u,
+                    LINEAR_Z = 2u,
+                    CIRCULAR = 4u,
+                };
+                /** Polarization selection
+                 */
+                static constexpr PolarisationType Polarisation = PARAM_LASERPOL;
+            };
+
+            struct DivPulsesParam : PlaneWaveParam
+            {
+                /* Laser profile with Gaussian spatial envelope and the following
+                 * temporal shape:
+                 * A Gaussian peak (optionally lengthened by a plateau) is preceded by
+                 * two pieces of exponential preramps, defined by 3 (time, intensity)-
+                 * -points.
+                 * The first two points get connected by an exponential, the 2nd and
+                 * 3rd point are connected by another exponential, which is then
+                 * extrapolated to the peak. The Gaussian is added everywhere, but
+                 * typically contributes significantly only near the peak.
+                 * It is advisable to set the third point far enough from the plateau
+                 * (approx 3*FWHM), then the contribution from the Gaussian is
+                 * negligible there, and the intensity can be set as measured from the
+                 * laser profile.
+                 * Optionally a Gaussian prepulse can be added, given by the parameters
+                 * of the relative intersity and time point.
+                 * The time of the prepulse and the three preramp points are given in
+                 * SI, the intensities are given as multiples of the peak intensity.
+                 */
+
+                // Intensities of prepulse and exponential preramp
+                static constexpr float_X INT_RATIO_POINT_0 = PARAM_INT_0;
+                static constexpr float_X INT_RATIO_POINT_1 = PARAM_INT_1;
+                static constexpr float_X INT_RATIO_POINT_2 = PARAM_INT_2;
+                static constexpr float_X INT_RATIO_POINT_3 = PARAM_INT_3;
+
+                // time-positions of prepulse and preramps points
+                static constexpr float_64 TIME_START_fs = PARAM_TIME_START;
+                static constexpr float_64 TIME_POINT_0_fs = PARAM_TIME_0;
+                static constexpr float_64 TIME_POINT_1_fs = PARAM_TIME_1;
+                static constexpr float_64 TIME_POINT_2_fs = PARAM_TIME_2;
+                static constexpr float_64 TIME_POINT_3_fs = PARAM_TIME_3;
+                static constexpr float_64 TIME_ENDLASER_fs = PARAM_TIME_END;
+
+                static constexpr float_64 PULSE01_INT = PARAM_P01i;
+                static constexpr float_64 PULSE01_TIME = PARAM_P01t;
+                static constexpr float_64 PULSE01_LENRATIO = PARAM_P01l;
+                static constexpr float_64 PULSE02_INT = PARAM_P02i;
+                static constexpr float_64 PULSE02_TIME = PARAM_P02t;
+                static constexpr float_64 PULSE02_LENRATIO = PARAM_P02l;
+                static constexpr float_64 PULSE03_INT = PARAM_P03i;
+                static constexpr float_64 PULSE03_TIME = PARAM_P03t;
+                static constexpr float_64 PULSE03_LENRATIO = PARAM_P03l;
+                static constexpr float_64 PULSE04_INT = PARAM_P04i;
+                static constexpr float_64 PULSE04_TIME = PARAM_P04t;
+                static constexpr float_64 PULSE04_LENRATIO = PARAM_P04l;
+                static constexpr float_64 PULSE05_INT = PARAM_P05i;
+                static constexpr float_64 PULSE05_TIME = PARAM_P05t;
+                static constexpr float_64 PULSE05_LENRATIO = PARAM_P05l;
+                static constexpr float_64 PULSE06_INT = PARAM_P06i;
+                static constexpr float_64 PULSE06_TIME = PARAM_P06t;
+                static constexpr float_64 PULSE06_LENRATIO = PARAM_P06l;
+                static constexpr float_64 PULSE07_INT = PARAM_P07i;
+                static constexpr float_64 PULSE07_TIME = PARAM_P07t;
+                static constexpr float_64 PULSE07_LENRATIO = PARAM_P07l;
+                static constexpr float_64 PULSE08_INT = PARAM_P08i;
+                static constexpr float_64 PULSE08_TIME = PARAM_P08t;
+                static constexpr float_64 PULSE08_LENRATIO = PARAM_P08l;
+
+                static constexpr float_64 SINPULSE01_INT = PARAM_S01i;
+                static constexpr float_64 SINPULSE01_T1 = PARAM_S01s;
+                static constexpr float_64 SINPULSE01_T2 = PARAM_S01e;
+                static constexpr float_64 SINPULSE02_INT = PARAM_S02i;
+                static constexpr float_64 SINPULSE02_T1 = PARAM_S02s;
+                static constexpr float_64 SINPULSE02_T2 = PARAM_S02e;
+                static constexpr float_64 SINPULSE03_INT = PARAM_S03i;
+                static constexpr float_64 SINPULSE03_T1 = PARAM_S03s;
+                static constexpr float_64 SINPULSE03_T2 = PARAM_S03e;
+                static constexpr float_64 SINPULSE04_INT = PARAM_S04i;
+                static constexpr float_64 SINPULSE04_T1 = PARAM_S04s;
+                static constexpr float_64 SINPULSE04_T2 = PARAM_S04e;
+                static constexpr float_64 SINPULSE05_INT = PARAM_S05i;
+                static constexpr float_64 SINPULSE05_T1 = PARAM_S05s;
+                static constexpr float_64 SINPULSE05_T2 = PARAM_S05e;
+                static constexpr float_64 SINPULSE06_INT = PARAM_S06i;
+                static constexpr float_64 SINPULSE06_T1 = PARAM_S06s;
+                static constexpr float_64 SINPULSE06_T2 = PARAM_S06e;
+                static constexpr float_64 SINPULSE07_INT = PARAM_S07i;
+                static constexpr float_64 SINPULSE07_T1 = PARAM_S07s;
+                static constexpr float_64 SINPULSE07_T2 = PARAM_S07e;
+                static constexpr float_64 SINPULSE08_INT = PARAM_S08i;
+                static constexpr float_64 SINPULSE08_T1 = PARAM_S08s;
+                static constexpr float_64 SINPULSE08_T2 = PARAM_S08e;
+                static constexpr float_64 SINPULSE09_INT = PARAM_S09i;
+                static constexpr float_64 SINPULSE09_T1 = PARAM_S09s;
+                static constexpr float_64 SINPULSE09_T2 = PARAM_S09e;
+                static constexpr float_64 SINPULSE10_INT = PARAM_S10i;
+                static constexpr float_64 SINPULSE10_T1 = PARAM_S10s;
+                static constexpr float_64 SINPULSE10_T2 = PARAM_S10e;
+                static constexpr float_64 SINPULSE11_INT = PARAM_S11i;
+                static constexpr float_64 SINPULSE11_T1 = PARAM_S11s;
+                static constexpr float_64 SINPULSE11_T2 = PARAM_S11e;
+                static constexpr float_64 SINPULSE12_INT = PARAM_S12i;
+                static constexpr float_64 SINPULSE12_T1 = PARAM_S12s;
+                static constexpr float_64 SINPULSE12_T2 = PARAM_S12e;
+
+                static constexpr uint32_t SINPNR = divPulses::SINPNR;
+                using SINPULSES_INT_t = divPulses::SINPULSES_INT_t;
+                using SINPULSES_T1_t = divPulses::SINPULSES_T1_t;
+                using SINPULSES_T2_t = divPulses::SINPULSES_T2_t;
+
+                /** Pulse length: sigma of std. gauss for intensity (E^2)
+                 *  PULSE_LENGTH_SI = FWHM_of_Intensity   / [ 2*sqrt{ 2* ln(2) } ]
+                 *                                          [    2.354820045     ]
+                 *  Info:             FWHM_of_Intensity = FWHM_Illumination
+                 *                      = what a experimentalist calls "pulse duration"
+                 *  unit: seconds (1 sigma) */
+                static constexpr float_64 PULSE_LENGTH_SI = PARAM_PULSELENGTH * 1.e-15
+                    / 2.35482; // half of the time in which E falls to half its initial value (then I falls to half its
+                               // value in 15fs, approx 6 wavelengths). Those are 4.8 wavelenghts.
+
+                /** beam waist: distance from the axis where the pulse intensity (E^2)
+                 *              decreases to its 1/e^2-th part,
+                 *              WO_X_SI is this distance in x-direction
+                 *              W0_Z_SI is this distance in z-direction
+                 *              if both values are equal, the laser has a circular shape in x-z
+                 * W0_SI = FWHM_of_Intensity / sqrt{ 2* ln(2) }
+                 *                             [   1.17741    ]
+                 *  unit: meter */
+                static constexpr float_64 W0_X_SI = PARAM_W0 * 1.e-6;
+                static constexpr float_64 W0_Z_SI = W0_X_SI;
+
+                /** The laser pulse will be initialized half of PULSE_INIT times of the PULSE_LENGTH before plateau
+                and half at the end of the plateau
+                 *  unit: none */
+                static constexpr float_64 RAMP_INIT = PARAM_PULSEINIT;
+            };
+
+            //! currently selected laser profile
+            // using Selected = PlaneWave< PlaneWaveParam >;
+            using Selected = PARAM_LASERPROFILE<PMACC_JOIN(PARAM_LASERPROFILE, Param)>;
+
+        } // namespace laserProfiles
+    } // namespace fields
+} // namespace picongpu
