@@ -48,6 +48,7 @@
 #include "picongpu/fields/laserProfiles/profiles.def"
 #include <pmacc/ppFunctions.hpp>
 
+/* cmakeFlags */
 
 #ifndef PARAM_LASERPROFILE
   #define PARAM_LASERPROFILE DivPulses
@@ -103,6 +104,9 @@
   #define PARAM_TIME_END 100
 #endif
 
+#ifndef PARAM_PULSESNR
+  #define PARAM_PULSESNR 12
+#endif
 #ifndef PARAM_P01i
   #define PARAM_P01i 0.0
 #endif
@@ -175,7 +179,46 @@
 #ifndef PARAM_P08l
   #define PARAM_P08l 1.0
 #endif
+#ifndef PARAM_P09i
+  #define PARAM_P09i 0.0
+#endif
+#ifndef PARAM_P09t
+  #define PARAM_P09t -80
+#endif
+#ifndef PARAM_P09l
+  #define PARAM_P09l 1.0
+#endif
+#ifndef PARAM_P10i
+  #define PARAM_P10i 0.0
+#endif
+#ifndef PARAM_P10t
+  #define PARAM_P10t -80
+#endif
+#ifndef PARAM_P10l
+  #define PARAM_P10l 1.0
+#endif
+#ifndef PARAM_P11i
+  #define PARAM_P11i 0.0
+#endif
+#ifndef PARAM_P11t
+  #define PARAM_P11t -80
+#endif
+#ifndef PARAM_P11l
+  #define PARAM_P11l 1.0
+#endif
+#ifndef PARAM_P12i
+  #define PARAM_P12i 0.0
+#endif
+#ifndef PARAM_P12t
+  #define PARAM_P12t -80
+#endif
+#ifndef PARAM_P12l
+  #define PARAM_P12l 1.0
+#endif
 
+#ifndef PARAM_SINPNR
+  #define PARAM_SINPNR 12
+#endif
 #ifndef PARAM_S01i
   #define PARAM_S01i 0.0
 #endif
@@ -285,6 +328,9 @@
   #define PARAM_S12e -80
 #endif
 
+/* cmakeFlags */
+
+
 namespace picongpu
 {
     namespace fields
@@ -294,10 +340,15 @@ namespace picongpu
 
             namespace divPulses
             {
-                static constexpr uint32_t SINPNR = 2;
-                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_INT, 1.e-4, 0.1);
-                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T1, -200, -160);
-                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T2, -180, -100);
+                static constexpr uint32_t SINPNR = PARAM_SINPNR;
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_INT, PARAM_S01i, PARAM_S02i, PARAM_S03i, PARAM_S04i, PARAM_S05i, PARAM_S06i, PARAM_S07i, PARAM_S08i, PARAM_S09i, PARAM_S10i, PARAM_S11i, PARAM_S12i);
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T1, PARAM_S01s, PARAM_S02s, PARAM_S03s, PARAM_S04s, PARAM_S05s, PARAM_S06s, PARAM_S07s, PARAM_S08s, PARAM_S09s, PARAM_S10s, PARAM_S11s, PARAM_S12s);
+                PMACC_CONST_VECTOR(float_X, SINPNR, SINPULSES_T2, PARAM_S01e, PARAM_S02e, PARAM_S03e, PARAM_S04e, PARAM_S05e, PARAM_S06e, PARAM_S07e, PARAM_S08e, PARAM_S09e, PARAM_S10e, PARAM_S11e, PARAM_S12e);
+
+                static constexpr uint32_t PULSESNR = PARAM_PULSESNR;
+                PMACC_CONST_VECTOR(float_X, PULSESNR, PULSES_INT, PARAM_P01i, PARAM_P02i, PARAM_P03i, PARAM_P04i, PARAM_P05i, PARAM_P06i, PARAM_P07i, PARAM_P08i, PARAM_P09i, PARAM_P10i, PARAM_P11i, PARAM_P12i);
+                PMACC_CONST_VECTOR(float_X, PULSESNR, PULSES_TIME, PARAM_P01t, PARAM_P02t, PARAM_P03t, PARAM_P04t, PARAM_P05t, PARAM_P06t, PARAM_P07t, PARAM_P08t, PARAM_P09t, PARAM_P10t, PARAM_P11t, PARAM_P12t);
+                PMACC_CONST_VECTOR(float_X, PULSESNR, PULSES_LEN, PARAM_P01l, PARAM_P02l, PARAM_P03l, PARAM_P04l, PARAM_P05l, PARAM_P06l, PARAM_P07l, PARAM_P08l, PARAM_P09l, PARAM_P10l, PARAM_P11l, PARAM_P12l);
             } // namespace divPulses
 
             struct PlaneWaveParam
@@ -407,72 +458,15 @@ namespace picongpu
                 static constexpr float_64 TIME_POINT_3_fs = PARAM_TIME_3;
                 static constexpr float_64 TIME_ENDLASER_fs = PARAM_TIME_END;
 
-                static constexpr float_64 PULSE01_INT = PARAM_P01i;
-                static constexpr float_64 PULSE01_TIME = PARAM_P01t;
-                static constexpr float_64 PULSE01_LENRATIO = PARAM_P01l;
-                static constexpr float_64 PULSE02_INT = PARAM_P02i;
-                static constexpr float_64 PULSE02_TIME = PARAM_P02t;
-                static constexpr float_64 PULSE02_LENRATIO = PARAM_P02l;
-                static constexpr float_64 PULSE03_INT = PARAM_P03i;
-                static constexpr float_64 PULSE03_TIME = PARAM_P03t;
-                static constexpr float_64 PULSE03_LENRATIO = PARAM_P03l;
-                static constexpr float_64 PULSE04_INT = PARAM_P04i;
-                static constexpr float_64 PULSE04_TIME = PARAM_P04t;
-                static constexpr float_64 PULSE04_LENRATIO = PARAM_P04l;
-                static constexpr float_64 PULSE05_INT = PARAM_P05i;
-                static constexpr float_64 PULSE05_TIME = PARAM_P05t;
-                static constexpr float_64 PULSE05_LENRATIO = PARAM_P05l;
-                static constexpr float_64 PULSE06_INT = PARAM_P06i;
-                static constexpr float_64 PULSE06_TIME = PARAM_P06t;
-                static constexpr float_64 PULSE06_LENRATIO = PARAM_P06l;
-                static constexpr float_64 PULSE07_INT = PARAM_P07i;
-                static constexpr float_64 PULSE07_TIME = PARAM_P07t;
-                static constexpr float_64 PULSE07_LENRATIO = PARAM_P07l;
-                static constexpr float_64 PULSE08_INT = PARAM_P08i;
-                static constexpr float_64 PULSE08_TIME = PARAM_P08t;
-                static constexpr float_64 PULSE08_LENRATIO = PARAM_P08l;
-
-                static constexpr float_64 SINPULSE01_INT = PARAM_S01i;
-                static constexpr float_64 SINPULSE01_T1 = PARAM_S01s;
-                static constexpr float_64 SINPULSE01_T2 = PARAM_S01e;
-                static constexpr float_64 SINPULSE02_INT = PARAM_S02i;
-                static constexpr float_64 SINPULSE02_T1 = PARAM_S02s;
-                static constexpr float_64 SINPULSE02_T2 = PARAM_S02e;
-                static constexpr float_64 SINPULSE03_INT = PARAM_S03i;
-                static constexpr float_64 SINPULSE03_T1 = PARAM_S03s;
-                static constexpr float_64 SINPULSE03_T2 = PARAM_S03e;
-                static constexpr float_64 SINPULSE04_INT = PARAM_S04i;
-                static constexpr float_64 SINPULSE04_T1 = PARAM_S04s;
-                static constexpr float_64 SINPULSE04_T2 = PARAM_S04e;
-                static constexpr float_64 SINPULSE05_INT = PARAM_S05i;
-                static constexpr float_64 SINPULSE05_T1 = PARAM_S05s;
-                static constexpr float_64 SINPULSE05_T2 = PARAM_S05e;
-                static constexpr float_64 SINPULSE06_INT = PARAM_S06i;
-                static constexpr float_64 SINPULSE06_T1 = PARAM_S06s;
-                static constexpr float_64 SINPULSE06_T2 = PARAM_S06e;
-                static constexpr float_64 SINPULSE07_INT = PARAM_S07i;
-                static constexpr float_64 SINPULSE07_T1 = PARAM_S07s;
-                static constexpr float_64 SINPULSE07_T2 = PARAM_S07e;
-                static constexpr float_64 SINPULSE08_INT = PARAM_S08i;
-                static constexpr float_64 SINPULSE08_T1 = PARAM_S08s;
-                static constexpr float_64 SINPULSE08_T2 = PARAM_S08e;
-                static constexpr float_64 SINPULSE09_INT = PARAM_S09i;
-                static constexpr float_64 SINPULSE09_T1 = PARAM_S09s;
-                static constexpr float_64 SINPULSE09_T2 = PARAM_S09e;
-                static constexpr float_64 SINPULSE10_INT = PARAM_S10i;
-                static constexpr float_64 SINPULSE10_T1 = PARAM_S10s;
-                static constexpr float_64 SINPULSE10_T2 = PARAM_S10e;
-                static constexpr float_64 SINPULSE11_INT = PARAM_S11i;
-                static constexpr float_64 SINPULSE11_T1 = PARAM_S11s;
-                static constexpr float_64 SINPULSE11_T2 = PARAM_S11e;
-                static constexpr float_64 SINPULSE12_INT = PARAM_S12i;
-                static constexpr float_64 SINPULSE12_T1 = PARAM_S12s;
-                static constexpr float_64 SINPULSE12_T2 = PARAM_S12e;
-
                 static constexpr uint32_t SINPNR = divPulses::SINPNR;
                 using SINPULSES_INT_t = divPulses::SINPULSES_INT_t;
                 using SINPULSES_T1_t = divPulses::SINPULSES_T1_t;
                 using SINPULSES_T2_t = divPulses::SINPULSES_T2_t;
+
+                static constexpr uint32_t PULSESNR = divPulses::PULSESNR;
+                using PULSES_INT_t = divPulses::PULSES_INT_t;
+                using PULSES_TIME_t = divPulses::PULSES_TIME_t;
+                using PULSES_LEN_t = divPulses::PULSES_LEN_t;
 
                 /** Pulse length: sigma of std. gauss for intensity (E^2)
                  *  PULSE_LENGTH_SI = FWHM_of_Intensity   / [ 2*sqrt{ 2* ln(2) } ]

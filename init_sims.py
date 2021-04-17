@@ -10,8 +10,25 @@ def init_params(filename):
     spec.loader.exec_module(module)
     return module.default_params
 
+class RegisteringMetaclass(type):
+    """ adds class to list upon subclassing of MyObject """
+    my_classes = {}
+    def __init__(cls, name, bases, clsdict):
+        if len(cls.mro()) > 1:
+            base_class = cls.mro()[-2]
+            my_classes = base_class.my_classes
+            if hasattr(base_class, "my_classes"):
+                my_classes = base_class.my_classes
+            else:
+                my_classes = {}
+                base_class.my_classes = my_classes
 
-class MyObject(object):
+            my_classes[name] = cls
+
+        super().__init__(name, bases, clsdict)
+
+
+class MyObject(object, metaclass=RegisteringMetaclass):
     """ Base object provides funtionality to dump and load """
     necessary_attrs = []
     additional_attrs = []
@@ -59,11 +76,25 @@ class MyObject(object):
 
         return self
 
-    def dumps(self):
-        """ dump all data in a string """
+
+    def dumpd_prepare_dumps(self):
+        """ includes actions to make object dumpeable to string.
+        Can be appended/overwritten by subclasses """
         data = self.dumpd()
         # the attribute "class" is treated separately, only class name is dumped. The check on name compatibility is done upon loading.
         data['class'] = data['class'].__name__
+        my_classes = type(self).my_classes
+        for key, value in data.items():
+            if type(value) in my_classes.values():
+                data[f"{key}_string"] = value.dumps()
+                del(data[key])
+
+        return data
+
+
+    def dumps(self):
+        """ dump all data in a string """
+        data = self.dumpd_prepare_dumps()
         text = yaml.dump(data)
 
         # check, that all other attributes are loadable correctly
@@ -76,13 +107,17 @@ class MyObject(object):
     def loads(cls, text):
         """ create instance from a string representation """
         data = yaml.safe_load(text)
-        # the attribute "class" means the class name in the text, but the python object in the dict. Can only do name compatibility check.
-        if not cls.__name__ == data['class']:
-            raise ValueError("Error in load method from yaml representation. Calling class name must match the dumped name")
-        else:
-            data['class'] = cls
+        # Don't use the loading cls, but the appropriate class, as specified in the string
+        cls = cls.my_classes[data['class']]
+        data['class'] = cls
 
-        result = cls.loadd(data)
+        for key, value in data.items():
+            if key[-7:]=="_string":
+                value = cls.loads(value)
+                data[key[:-7]] = value
+                del(data[key])
+
+        return cls.loadd(data)
 
 
 class Batch(MyObject):
@@ -96,16 +131,16 @@ class PicongpuBatch(Batch):
 
 
 class Sim(MyObject):
-    necessary_attrs = ['batch', 'paramdict', 'status']
+    necessary_attrs = ['batch', 'params', 'status', 'rundir']
     status_attrs = ['created', 'submitted', 'running', 'ready']
     # TODO: methods to determine each of the status attrs; here or in PicongpuSim?
 
 
 class PicongpuSim(Sim):
-    def __init__(self, batch):
+    def __init__(self, batch=None):
         self.status_attrs += ['compiled']
-        self.necessary_attrs += ['rundir']
-        self.batch = batch
+        if not batch is None:
+            self.batch = batch
 
 
     # TODO: was von hier lieber hoch in Sim schieben
