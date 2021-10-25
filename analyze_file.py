@@ -471,7 +471,7 @@ class AnalyzePhaseSpace(object):
             bins_mom_pic = bins_mom_SI / unitmom
 
             # divide in chunks of less than 1e8 particles:
-            nrchunks = (Np + 1) // 100000000 + 1
+            nrchunks = (Np + 1) // 40000000 + 1
             if verbose:
                 print(f"will read the {Np} macroparticles in {nrchunks} chunks")
             limits = list(np.linspace(0, Np, nrchunks, endpoint=False, dtype=int))[1:]
@@ -558,11 +558,18 @@ def energies_from_hist(filename, threshold=1., convolve=([0.2, 0.6, 0.2], 1)):
     
     def last_bin(ts=steps[-1], threshold=threshold):
         zeile = np.convolve(arr[indices[ts]], liste)[anz:-anz]
-        return energies[np.where(zeile > threshold)[0][-1]+anz]
+        where = np.where(zeile > threshold)[0]
+        if not len(where)>0:
+            return energies[0]
+        return energies[where[-1]+anz]
         
     def first_gap(ts=steps[-1], threshold=threshold):
         zeile = np.convolve(arr[indices[ts]], liste)[anz:-anz]
-        return energies[np.where(zeile <= threshold)[0][0]+anz]
+        where = np.where(zeile <= threshold)[0]
+        if not len(where)>0:
+            return energies[-1]
+        else:  
+            return energies[where[0]+anz]
     
     return energies, steps, arr, last_bin, first_gap
 
