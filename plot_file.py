@@ -128,9 +128,12 @@ class PlotAngularDistributions(object):
 
             ax1.cla()
             ax2.cla()
-            im = ax1.pcolormesh(bins_phi, bins_theta[:-1], plotdata[:-1, :], norm=LogNorm())
-            plt.colorbar(im, cax=ax2)
-            ax1.set_title(f"$H^+$ with Energy over {Evalue} MeV")
+            try:
+                im = ax1.pcolormesh(bins_phi, bins_theta[:-1], plotdata[:-1, :], norm=LogNorm())
+                plt.colorbar(im, cax=ax2)
+                ax1.set_title(f"$H^+$ with Energy over {Evalue} MeV")
+            except ValueError:
+                Evalue = None
             yield Evalue, ax1, ax2, fig
 
     # war ein Versuch, die indices zu suchen; ist bissl Quatsch, weil das nicht der Anteil der Teilchen insgesamt, sondern nur an den im Histogramm vorhandenen

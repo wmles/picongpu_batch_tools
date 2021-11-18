@@ -17,7 +17,13 @@ TODO: extract all common stuff into decorator/functions
 class AnalyzeAngularDistributions(object):
     """ collects methods for analyzing the angular distributions and spectra """
     @staticmethod
-    def rectangle_from_particles(filename, ts=None):
+    def rectangle_from_particles(
+            filename, 
+            ts=None,
+            Emax=240,
+            txmax=20, tzmax=20,
+            Nx=24, Nz=24, NE=50,
+        ):
         """ Analyzes the particles-output and returns a histogram
         with the bins (E, thetax, thetaz)
         Thetax and thetaz are not angles in any usual sperical angle
@@ -29,10 +35,6 @@ class AnalyzeAngularDistributions(object):
 
         # create the arrays for the energy- and angle-coordinates
         # definitions:
-        Emax = 240
-        txmax, tzmax = 20, 20
-        Nx, Nz, NE = 24, 24, 50
-
         bins_E = np.linspace(0, Emax, NE+1)       # Emax in MeV
         bins_thetax = np.linspace(-txmax, txmax, Nx+1) # in deg
         bins_thetaz = np.linspace(-tzmax, tzmax, Nz+1) # in deg
@@ -90,7 +92,98 @@ class AnalyzeAngularDistributions(object):
 
 
     @staticmethod
-    def polar_from_particles(filename, histargs={}, ts=None):
+    def geographic_from_particles(
+            filename, 
+            ts=None,
+            bins_lat=np.linspace(-5, 5, 11),
+            bins_lon=np.linspace(-45, 45, 91), 
+            bins_E=np.linspace(0, 240, 121),
+            countmacro=False,
+        ):
+        """ Analyzes the particles-output and returns a histogram
+        with the bins (E, longitude, latitude)
+        BUG/TODO: only handles forward direction
+        """
+        if ts is None: # then try to guess
+            ts = filename.replace('.bp', '').split('_')[-1]
+
+        # create the arrays for the energy- and angle-coordinates
+        # definitions:
+        bins_sign    = [-1e99, 0, 1e99]                            # find sign
+        Nlat = len(bins_lat) - 1
+        Nlon = len(bins_lon) - 1
+        NE = len(bins_E) - 1
+
+        # unit conversions:
+        m_p = 1.6726219e-27 # in SI
+        c = 3e8 # in SI
+        J2MeV = 6.242e+12
+
+        # new bins
+        E_0 = m_p * c**2                                    # in SI
+        bins_E_SI = bins_E / J2MeV                          # in SI
+        bins_p2_SI = ((bins_E_SI + E_0)**2 - E_0**2) / c**2 # in SI
+        bins_tanz = np.tan(bins_lat / 180 * np.pi)          # the tan-values of the angle towards horizontplane
+        bins_tanx = np.tan(bins_lon / 180 * np.pi)          # the tan-values of the angle inside horizontplane
+
+        diffs_E = np.diff(bins_E)
+        values_E = (bins_E[1:] + bins_E[:-1]) / 2
+        values_lon = (bins_lon[:-1] + bins_lon[1:]) / 360 * np.pi
+        values_lat = (bins_lat[:-1] + bins_lat[1:]) / 360 * np.pi
+        diffs_sterad_rings = np.diff(np.sin(bins_lat / 180 * np.pi)) * 2*np.pi
+        diffs_sterad = np.diff(bins_lon / 180 * np.pi).reshape((1, -1)) * diffs_sterad_rings.reshape((-1, 1))
+
+        with bp.File(filename) as fh:
+            ds = fh[f'/data/{ts}/particles/H_all']
+            Np = ds["weighting"].shape[0]
+            un = ds['momentum/y'].unitSI.value
+            
+            # divide in chunks of less than 1e8 particles:
+            nrchunks = (Np + 1) // 40000000 + 1
+            print(f"will read the {Np} macroparticles in {nrchunks} chunks")
+
+            limits = list(np.linspace(0, Np, nrchunks, endpoint=False, dtype=int))[1:]
+            indices = [slice(i, j, None) for (i, j) in zip([None] + limits, limits + [None])]
+            hist_raw = 0
+
+            for i, index in enumerate(indices):
+                # read the data
+                px = ds[f'momentum/x'][index]
+                py = ds[f'momentum/y'][index]
+                pz = ds[f'momentum/z'][index]
+                un = ds[f'momentum/y'].unitSI.value
+                we = ds[f'weighting'][index]
+    
+                p_y = py / we
+                p_x = px / we
+                p_z = pz / we
+    
+                p2h = p_x**2 + p_y**2
+                p2z = p_z**2
+                tanx = px / py
+                tanz = p_z / p2h**0.5
+    
+                bins_p2 = bins_p2_SI / un**2
+                hist_one, bin_edges = np.histogramdd(
+                    (tanz, tanx, p2h+p2z, p_y),
+                    bins=(bins_tanz, bins_tanx, bins_p2, bins_sign),
+                    weights=we if not countmacro else None,
+                )
+
+                hist_raw += hist_one[:, :, :, 1] # chose forward p_y
+                print(f"read {i+1}. chunk")
+
+        # project the four quarters back on the whole circle
+        # and remove last dimension of length 1
+        # and normalize to sterad and MeV 
+        normfactor = diffs_E.reshape((1, 1, NE)) * diffs_sterad.reshape((Nlat, Nlon, 1)) if not countmacro else 1
+        hist = hist_raw / normfactor
+            
+        return hist, bins_lat, bins_lon, bins_E
+
+
+    @staticmethod
+    def polar_from_particles(filename, histargs={}, ts=None, verbose=True):
         """ Analyzes the particles-output and returns a histogram
         with the bins (E, theta, phi), i.e. the usual sperical angles
         with respect to the laser propagation direction.
@@ -139,29 +232,49 @@ class AnalyzeAngularDistributions(object):
 
         # get the data of the particles
         with bp.File(filename) as fh:
-            px = fh[f'/data/{ts}/particles/H_all/momentum/x'][:]
-            py = fh[f'/data/{ts}/particles/H_all/momentum/y'][:]
-            pz = fh[f'/data/{ts}/particles/H_all/momentum/z'][:]
-            un = fh[f'/data/{ts}/particles/H_all/momentum/y'].unitSI.value
-            we = fh[f'/data/{ts}/particles/H_all/weighting'][:]
+            ds = fh[f'/data/{ts}/particles/H_all']
+            Np = ds["weighting"].shape[0]
+            un = ds['momentum/y'].unitSI.value
+            
+            # divide in chunks of less than 1e8 particles:
+            nrchunks = (Np + 1) // 40000000 + 1
+            if verbose:
+                print(f"will read the {Np} macroparticles in {nrchunks} chunks")
 
-        # compute derived quantities of the particles
-        p_x = px / we
-        p_y = py / we        
-        p_z = pz / we
-        p2y = p_y ** 2
-        p2x = p_x ** 2
-        p2z = p_z ** 2
-        tan2t = (p2x + p2z) / p2y
-        tan2p = p2z / p2x
-        bins_p2 = bins_p2_SI / un**2
+            limits = list(np.linspace(0, Np, nrchunks, endpoint=False, dtype=int))[1:]
+            indices = [slice(i, j, None) for (i, j) in zip([None] + limits, limits + [None])]
+            hist_raw = 0
 
-        # do the multidimensional binning
-        hist_raw, bin_edges = np.histogramdd(
-            (p2x+p2y+p2z, tan2t, tan2p, p_x, p_z, p_y),
-            bins=(bins_p2, bins_tan2t, bins_tan2p, bins_sign, bins_sign, bins_sign),
-            weights=we
-        )
+            for i, index in enumerate(indices):
+                # read the data
+                px = ds['momentum/x'][index]
+                py = ds['momentum/y'][index]
+                pz = ds['momentum/z'][index]
+                we = ds['weighting'][index]
+
+                # compute derived quantities of the particles
+                p_x = px / we
+                p_y = py / we
+                p_z = pz / we
+                p2y = p_y ** 2
+                p2x = p_x ** 2
+                p2z = p_z ** 2
+                tan2t = (p2x + p2z) / p2y
+                tan2p = p2z / p2x
+                bins_p2 = bins_p2_SI / un**2
+
+                # do the multidimensional binning
+                hist_one, bin_edges = np.histogramdd(
+                    (p2x+p2y+p2z, tan2t, tan2p, p_x, p_z, p_y),
+                    bins=(bins_p2, bins_tan2t, bins_tan2p, bins_sign, bins_sign, bins_sign),
+                    weights=we
+                )
+                
+                hist_raw += hist_one
+                if verbose:
+                    print(f"read {i+1}. chunk")
+
+
 
         # project the four quarters back on the whole circle
         # and remove last dimension of length 1
